@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apuração de Resultados - Equipe</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --bg: #f3f4f6;
+            --card-bg: #ffffff;
+            --text: #1f2937;
+            --border: #e5e7eb;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 20px;
+        }
+
+        .container {
+            background: var(--card-bg);
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 { text-align: center; color: var(--primary); }
+
+        button {
+            background-color: var(--primary); color: white; border: none;
+            padding: 10px 20px; border-radius: 6px; cursor: pointer;
+            font-size: 1rem; display: block; margin: 20px auto;
+        }
+        button:hover { background-color: #4338ca; }
+
+        table {
+            width: 100%; border-collapse: collapse; margin-top: 20px;
+        }
+        
+        th, td {
+            padding: 12px; text-align: left; border-bottom: 1px solid var(--border);
+        }
+        
+        th { background-color: #f9fafb; font-weight: 600; }
+        tr:hover { background-color: #f9fafb; }
+        
+        .score-box {
+            font-weight: bold; padding: 4px 8px; border-radius: 4px;
+            background-color: #e0e7ff; color: #3730a3;
+        }
+        
+        .winner { background-color: #d1fae5; }
+        .details { font-size: 0.85em; color: #666; display: none; margin-top: 5px;}
+        .show-details-btn {
+            background: none; border: none; color: var(--primary); 
+            padding: 0; margin: 0; font-size: 0.8em; text-decoration: underline; cursor: pointer;
+        }
+
+        .loading { text-align: center; color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🏆 Painel de Apuração</h1>
+    <p style="text-align: center;">Regra aplicada: Média das notas excluindo a maior e a menor (Regra Olímpica).</p>
+    
+    <button onclick="calculateResults()">🔄 Carregar e Calcular Resultados</button>
+    
+    <div id="loading" class="loading hidden">Buscando votos no banco de dados...</div>
+    
+    <div id="resultsArea"></div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+    // 🔴 COLOQUE AS MESMAS CHAVES AQUI
+    const firebaseConfig = {
+        apiKey: "AIzaSyDmMU-pZdL2oRJQVBgvG9sY7Z5x3pt9us4",
+        authDomain: "votacaoequipe-a72e6.firebaseapp.com",
+        projectId: "votacaoequipe-a72e6",
+        storageBucket: "votacaoequipe-a72e6.firebasestorage.app",
+        messagingSenderId: "16090491800",
+        appId: "1:16090491800:web:38cf7b80da0fe17149d9ed"
+    };
+
+    let db;
+    try {
+        const app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+    } catch(e) { console.error(e); }
+
+    window.calculateResults = async () => {
+        const btn = document.querySelector('button');
+        const load = document.getElementById('loading');
+        btn.disabled = true;
+        load.style.display = 'block';
+
+        try {
+            // 1. Buscar todos os votos
+            const querySnapshot = await getDocs(collection(db, "votos_2025"));
+            let allVotes = [];
+            
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                // O formato salvo é { user: "Nome", votes: [ {target: "X", scores: {...}}, ... ] }
+                // Precisamos "desempacotar" isso
+                if(data.votes && Array.isArray(data.votes)) {
+                    data.votes.forEach(singleVote => {
+                        allVotes.push(singleVote);
+                    });
+                }
+            });
+
+            if(allVotes.length === 0) {
+                alert("Nenhum voto encontrado no banco de dados.");
+                return;
+            }
+
+            processData(allVotes);
+
+        } catch (error) {
+            console.error(error);
+            alert("Erro ao buscar dados. Verifique o console (F12) e suas chaves do Firebase.");
+        } finally {
+            btn.disabled = false;
+            load.style.display = 'none';
+        }
+    };
+
+    function processData(votes) {
+        // Estrutura para agrupar: { "NomeDoTarget": { "Proatividade": [3, 5, 4...], ... } }
+        let groupedData = {};
+
+        votes.forEach(v => {
+            if (!groupedData[v.target]) {
+                groupedData[v.target] = {};
+            }
+            
+            for (const [criterion, score] of Object.entries(v.scores)) {
+                if (!groupedData[v.target][criterion]) {
+                    groupedData[v.target][criterion] = [];
+                }
+                groupedData[v.target][criterion].push(score);
+            }
+        });
+
+        // Calcular médias
+        let ranking = [];
+
+        for (const [name, criteriaMap] of Object.entries(groupedData)) {
+            let totalScore = 0;
+            let breakdownHtml = "";
+
+            for (const [crit, scores] of Object.entries(criteriaMap)) {
+                // REGRA OLÍMPICA
+                let finalCritScore = 0;
+                let usedScores = [...scores]; // Copia array
+
+                // Só aplica corte se tiver pelo menos 3 votos (senão zera tudo ou fica injusto)
+                if (scores.length >= 3) {
+                    scores.sort((a, b) => a - b);
+                    // Remove menor e maior
+                    const removedLow = scores[0];
+                    const removedHigh = scores[scores.length - 1];
+                    const filtered = scores.slice(1, -1);
+                    
+                    // Média
+                    const sum = filtered.reduce((a, b) => a + b, 0);
+                    finalCritScore = sum / filtered.length;
+                    
+                    breakdownHtml += `<div><strong>${crit}:</strong> ${finalCritScore.toFixed(2)} <span style="font-size:0.8em;color:#999">(Notas: [${scores.join(', ')}] - Cortados: ${removedLow}, ${removedHigh})</span></div>`;
+                } else {
+                    // Média simples se poucos votos
+                    const sum = scores.reduce((a, b) => a + b, 0);
+                    finalCritScore = sum / scores.length;
+                    breakdownHtml += `<div><strong>${crit}:</strong> ${finalCritScore.toFixed(2)} <span style="font-size:0.8em;color:#999">(Média simples, poucos votos)</span></div>`;
+                }
+
+                totalScore += finalCritScore;
+            }
+
+            // Média Geral (Soma das médias dos critérios / número de critérios)
+            // Ou Soma Pura. Vamos usar Soma Pura dos critérios para pontuação final.
+            ranking.push({
+                name: name,
+                total: totalScore,
+                details: breakdownHtml,
+                voteCount: Object.values(criteriaMap)[0].length // Quantos votaram nessa pessoa
+            });
+        }
+
+        // Ordenar do maior para o menor
+        ranking.sort((a, b) => b.total - a.total);
+
+        renderTable(ranking);
+    }
+
+    function renderTable(ranking) {
+        const area = document.getElementById('resultsArea');
+        let html = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>Posição</th>
+                        <th>Colaborador</th>
+                        <th>Votos Recebidos</th>
+                        <th>Pontuação Final (Soma Médias)</th>
+                        <th>Detalhes</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        ranking.forEach((r, index) => {
+            const medal = index === 0 ? '🥇 ' : (index === 1 ? '🥈 ' : (index === 2 ? '🥉 ' : ''));
+            const rowClass = index === 0 ? 'winner' : '';
+            
+            html += `
+                <tr class="${rowClass}">
+                    <td>${medal}#${index + 1}</td>
+                    <td style="font-weight:bold">${r.name}</td>
+                    <td>${r.voteCount}</td>
+                    <td><span class="score-box">${r.total.toFixed(2)}</span></td>
+                    <td>
+                        <button class="show-details-btn" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'block' ? 'none' : 'block'">Ver critérios</button>
+                        <div class="details">${r.details}</div>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += `</tbody></table>`;
+        area.innerHTML = html;
+    }
+</script>
+
+</body>
+</html>
