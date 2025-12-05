@@ -40,11 +40,19 @@
         h1, h2 { text-align: center; margin-top: 0; color: #111827; }
         p.subtitle { text-align: center; color: var(--text-light); margin-bottom: 2rem; }
 
-        select, button {
+        select, button, textarea {
             display: block; width: 100%; padding: 0.875rem;
             border-radius: 6px; font-size: 1rem; margin-bottom: 1rem;
+            box-sizing: border-box; /* Garante que o padding não estoure a largura */
         }
-        select { border: 1px solid var(--border); background-color: #fff; }
+        select, textarea { border: 1px solid var(--border); background-color: #fff; }
+        
+        /* Estilo específico para o campo de texto */
+        textarea {
+            font-family: inherit;
+            resize: vertical;
+            min-height: 100px;
+        }
         
         button {
             border: none; background-color: var(--primary); color: white;
@@ -154,7 +162,7 @@
     </script>
 
     <script>
-        // LISTA DE COLABORADORES (Wilkson removido conforme solicitado)
+        // LISTA DE COLABORADORES
         const teamMembers = [
             "Adriano", "Ana Carolina", "Arlison", "Elvis", "Mara", 
             "Suendey", "Tahan", "Allan Feitosa", "Rodrigo Almeida", "Aniceto Joziel"
@@ -202,6 +210,7 @@
             const container = document.getElementById('criteriaContainer');
             container.innerHTML = ''; 
 
+            // Renderiza os critérios de notas
             criteriaList.forEach((crit, idx) => {
                 let optionsHTML = '';
                 for(let i=1; i<=5; i++) {
@@ -214,19 +223,37 @@
                 }
                 container.innerHTML += `<div class="criteria-item"><label style="font-weight:bold;display:block;margin-bottom:5px;">${crit}</label><div class="rating-options">${optionsHTML}</div></div>`;
             });
+
+            // --- NOVO CAMPO ADICIONADO AQUI ---
+            container.innerHTML += `
+                <div class="criteria-item" style="border-bottom: none; padding-bottom: 0;">
+                    <label style="font-weight:bold; display:block; margin-bottom:5px;">O que você gostaria de melhorar na DNB?</label>
+                    <textarea id="feedbackText" placeholder="Escreva sua resposta aqui..."></textarea>
+                </div>
+            `;
+
             document.getElementById('screen-voting').scrollIntoView({ behavior: 'smooth' });
         }
 
         function submitVote() {
             const form = document.getElementById('voteForm');
-            if (!form.checkValidity()) return alert("Avalie todos os critérios.");
+            if (!form.checkValidity()) return alert("Por favor, avalie todos os critérios de nota.");
 
+            // Coleta notas
             const currentVotes = {};
             criteriaList.forEach((crit, idx) => {
                 currentVotes[crit] = parseInt(document.querySelector(`input[name="crit_${idx}"]:checked`).value);
             });
 
-            votesCollected.push({ target: votingQueue[currentIndex], scores: currentVotes });
+            // Coleta texto do novo campo
+            const feedbackValue = document.getElementById('feedbackText').value;
+
+            votesCollected.push({ 
+                target: votingQueue[currentIndex], 
+                scores: currentVotes,
+                feedback: feedbackValue // Salva a resposta textual
+            });
+
             currentIndex++;
             form.reset();
             renderVotingCard();
