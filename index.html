@@ -101,7 +101,20 @@
         <button onclick="submitVote()" style="margin-top: 1rem;">Próximo</button>
     </div>
 
-    <!-- SCREEN 3: SAVING/FINISH -->
+    <!-- SCREEN 3: FEEDBACK GERAL (NOVA TELA) -->
+    <div id="screen-feedback" class="container hidden">
+        <h2>Feedback Geral</h2>
+        <p class="subtitle">Para finalizar, uma pergunta sobre a empresa.</p>
+        
+        <div class="criteria-item" style="border-bottom: none;">
+            <label style="font-weight:bold; display:block; margin-bottom:5px;">O que você gostaria de melhorar na DNB?</label>
+            <textarea id="generalFeedbackText" placeholder="Escreva sua resposta aqui..."></textarea>
+        </div>
+
+        <button onclick="finishVotingProcess()" style="margin-top: 1rem;">Finalizar e Salvar</button>
+    </div>
+
+    <!-- SCREEN 4: SAVING/FINISH -->
     <div id="screen-finish" class="container hidden">
         <div id="save-loading">
             <div class="loader"></div>
@@ -200,7 +213,7 @@
 
         function renderVotingCard() {
             if (currentIndex >= votingQueue.length) {
-                finishVotingProcess();
+                showFeedbackScreen();
                 return;
             }
             const target = votingQueue[currentIndex];
@@ -224,14 +237,6 @@
                 container.innerHTML += `<div class="criteria-item"><label style="font-weight:bold;display:block;margin-bottom:5px;">${crit}</label><div class="rating-options">${optionsHTML}</div></div>`;
             });
 
-            // --- NOVO CAMPO ADICIONADO AQUI ---
-            container.innerHTML += `
-                <div class="criteria-item" style="border-bottom: none; padding-bottom: 0;">
-                    <label style="font-weight:bold; display:block; margin-bottom:5px;">O que você gostaria de melhorar na DNB?</label>
-                    <textarea id="feedbackText" placeholder="Escreva sua resposta aqui..."></textarea>
-                </div>
-            `;
-
             document.getElementById('screen-voting').scrollIntoView({ behavior: 'smooth' });
         }
 
@@ -245,13 +250,9 @@
                 currentVotes[crit] = parseInt(document.querySelector(`input[name="crit_${idx}"]:checked`).value);
             });
 
-            // Coleta texto do novo campo
-            const feedbackValue = document.getElementById('feedbackText').value;
-
             votesCollected.push({ 
                 target: votingQueue[currentIndex], 
-                scores: currentVotes,
-                feedback: feedbackValue // Salva a resposta textual
+                scores: currentVotes
             });
 
             currentIndex++;
@@ -259,13 +260,22 @@
             renderVotingCard();
         }
 
-        async function finishVotingProcess() {
+        function showFeedbackScreen() {
             document.getElementById('screen-voting').classList.add('hidden');
+            document.getElementById('screen-feedback').classList.remove('hidden');
+        }
+
+        async function finishVotingProcess() {
+            // Captura o feedback geral
+            const generalFeedback = document.getElementById('generalFeedbackText').value;
+
+            document.getElementById('screen-feedback').classList.add('hidden');
             document.getElementById('screen-finish').classList.remove('hidden');
 
             const finalPayload = {
                 user: currentUser,
                 votes: votesCollected,
+                generalFeedback: generalFeedback, // Salva o feedback geral
                 deviceTime: new Date().toISOString()
             };
 
