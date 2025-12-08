@@ -227,7 +227,7 @@
             criteriaList.forEach((crit, idx) => {
                 let optionsHTML = '';
                 for(let i=1; i<=5; i++) {
-                    let legend = i===1 ? '<div class="rating-legend">Ruim</div>' : (i===5 ? '<div class="rating-legend">Excel</div>' : '');
+                    let legend = i===1 ? '<div class="rating-legend">Ruim</div>' : (i===5 ? '<div class="rating-legend">Excelente</div>' : '');
                     optionsHTML += `
                         <div class="rating-option">
                             <input type="radio" name="crit_${idx}" value="${i}" required>
