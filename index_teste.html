@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Votação Equipe</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg: #f3f4f6;
+            --card-bg: #ffffff;
+            --text: #1f2937;
+            --text-light: #6b7280;
+            --border: #e5e7eb;
+            --success: #10b981;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background: var(--card-bg);
+            width: 100%;
+            max-width: 600px;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        h1, h2 { text-align: center; margin-top: 0; color: #111827; }
+        p.subtitle { text-align: center; color: var(--text-light); margin-bottom: 2rem; }
+
+        select, button, textarea {
+            display: block; width: 100%; padding: 0.875rem;
+            border-radius: 6px; font-size: 1rem; margin-bottom: 1rem;
+            box-sizing: border-box;
+        }
+        select, textarea { border: 1px solid var(--border); background-color: #fff; }
+        textarea { resize: vertical; min-height: 120px; font-family: inherit; }
+        
+        button {
+            border: none; background-color: var(--primary); color: white;
+            font-weight: 600; cursor: pointer; transition: 0.2s;
+        }
+        button:hover { background-color: var(--primary-hover); }
+        button:disabled { background-color: #9ca3af; cursor: not-allowed; }
+
+        .criteria-item { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+        .rating-options { display: flex; justify-content: space-between; gap: 5px; }
+        .rating-option { flex: 1; position: relative; }
+        .rating-option input { position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+        .rating-box {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 8px 0; background-color: #f9fafb; border: 1px solid var(--border);
+            border-radius: 6px; transition: all 0.2s; font-weight: bold; color: var(--text-light);
+        }
+        .rating-option input:checked + .rating-box {
+            background-color: var(--primary); color: white; border-color: var(--primary);
+            transform: scale(1.05); box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .rating-legend { font-size: 0.7rem; font-weight: normal; margin-top: 2px; }
+
+        .hidden { display: none !important; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <!-- TELA 1: LOGIN -->
+    <div id="screen-login" class="container">
+        <h1>Avaliação de Equipe</h1>
+        <p class="subtitle">Selecione seu nome para iniciar.</p>
+        
+        <!-- Select vazio inicialmente -->
+        <select id="userSelect" disabled>
+            <option value="">Carregando lista...</option>
+        </select>
+        
+        <button onclick="startVoting()" id="btnStart" disabled>Começar Votação</button>
+        <p id="loadingText" style="text-align: center; font-size: 0.8rem; color: #888; margin-top: 10px;">Verificando quem já votou...</p>
+    </div>
+
+    <!-- TELA 2: VOTAÇÃO -->
+    <div id="screen-voting" class="container hidden">
+        <h2 id="targetNameTitle">Avaliando: Fulano</h2>
+        <p class="subtitle" id="progressText">1 de 10</p>
+        <form id="voteForm"><div id="criteriaContainer"></div></form>
+        <button onclick="submitVote()" style="margin-top: 1rem;">Próximo</button>
+    </div>
+
+    <!-- TELA 3: FEEDBACK DNB -->
+    <div id="screen-feedback" class="container hidden">
+        <h2>Melhorias na DNB</h2>
+        <p class="subtitle">Sua opinião é fundamental para nosso crescimento.</p>
+        
+        <label style="font-weight: bold; display: block; margin-bottom: 10px; color: #374151;">
+            O que você acha que deve melhorar em nossa DNB?
+        </label>
+        
+        <textarea id="feedbackInput" placeholder="Digite sua sugestão, crítica construtiva ou observação aqui..."></textarea>
+        
+        <button onclick="submitFeedback()">Finalizar e Enviar</button>
+    </div>
+
+    <!-- TELA 4: SALVANDO/FINAL -->
+    <div id="screen-finish" class="container hidden">
+        <div id="save-loading">
+            <div class="loader"></div>
+            <p style="text-align: center; margin-top: 15px;">Salvando seus votos na nuvem...</p>
+        </div>
+        
+        <div id="save-success" class="hidden" style="text-align: center;">
+            <div style="font-size: 4rem; color: var(--success);">✅</div>
+            <h2>Sucesso!</h2>
+            <p class="subtitle">Voto registrado! Seu nome não aparecerá mais na lista.</p>
+            <button onclick="location.reload()" style="background-color: #666; margin-top: 10px;">Voltar ao Início</button>
+        </div>
+
+        <div id="save-error" class="hidden" style="text-align: center;">
+            <div style="font-size: 4rem;">❌</div>
+            <h2>Erro ao Salvar</h2>
+            <p class="subtitle" id="errorMsg">Verifique sua conexão.</p>
+            <button onclick="downloadJSON()" style="background-color: #666;">Baixar Backup (JSON)</button>
+        </div>
+    </div>
+
+    <!-- FIREBASE MODULES -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        // Adicionei getDocs aqui
+        import { getFirestore, collection, addDoc, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+        // SUAS CHAVES
+        const firebaseConfig = {
+            apiKey: "AIzaSyDmMU-pZdL2oRJQVBgvG9sY7Z5x3pt9us4",
+            authDomain: "votacaoequipe-a72e6.firebaseapp.com",
+            projectId: "votacaoequipe-a72e6",
+            storageBucket: "votacaoequipe-a72e6.firebasestorage.app",
+            messagingSenderId: "16090491800",
+            appId: "1:16090491800:web:38cf7b80da0fe17149d9ed"
+        };
+
+        let db;
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            console.log("Firebase conectado!");
+        } catch (e) {
+            console.error("Erro Firebase:", e);
+        }
+
+        // Função para salvar
+        window.saveVotesToCloud = async (finalData) => {
+            if (!db) throw new Error("Firebase não configurado.");
+            await addDoc(collection(db, "votos_2025"), {
+                ...finalData,
+                savedAt: serverTimestamp()
+            });
+        };
+
+        // NOVA FUNÇÃO: Buscar lista de quem já votou
+        window.getAlreadyVotedList = async () => {
+            if (!db) return [];
+            try {
+                const querySnapshot = await getDocs(collection(db, "votos_2025"));
+                const votedUsers = new Set();
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.user) votedUsers.add(data.user);
+                });
+                return Array.from(votedUsers);
+            } catch (e) {
+                console.error("Erro ao verificar votos existentes:", e);
+                return [];
+            }
+        };
+    </script>
+
+    <script>
+        const teamMembers = [
+            "Adriano", "Ana Carolina", "Arlison", "Elvis", "Mara", 
+            "Suendey", "Tahan", "Allan Feitosa", "Rodrigo Almeida", "Aniceto Joziel"
+        ];
+
+        const criteriaList = [
+            "Proatividade", "Assiduidade e Pontualidade", "Qualidade na Entrega",
+            "Produtividade", "Cumprimento de Normas", "Conhecimento Técnico"
+        ];
+
+        let currentUser = "";
+        let votingQueue = [];
+        let currentIndex = 0;
+        let votesCollected = [];
+        let feedbackText = "";
+
+        const select = document.getElementById('userSelect');
+        const btnStart = document.getElementById('btnStart');
+        const loadingText = document.getElementById('loadingText');
+
+        // INICIALIZAÇÃO INTELIGENTE
+        async function initApp() {
+            // Tenta obter a lista de quem já votou
+            let votedUsers = [];
+            
+            // Espera um pouco para garantir que o módulo Firebase carregou
+            let attempts = 0;
+            while (!window.getAlreadyVotedList && attempts < 10) {
+                await new Promise(r => setTimeout(r, 200));
+                attempts++;
+            }
+
+            if (window.getAlreadyVotedList) {
+                votedUsers = await window.getAlreadyVotedList();
+                loadingText.style.display = 'none';
+            } else {
+                loadingText.innerText = "Modo Offline (Não foi possível verificar votos anteriores)";
+            }
+
+            // Limpa o select
+            select.innerHTML = '<option value="">Selecione seu nome...</option>';
+            select.disabled = false;
+
+            let availableCount = 0;
+
+            teamMembers.sort().forEach(name => {
+                // SÓ ADICIONA SE NÃO ESTIVER NA LISTA DE VOTADOS
+                if (!votedUsers.includes(name)) {
+                    const opt = document.createElement('option');
+                    opt.value = name; 
+                    opt.textContent = name;
+                    select.appendChild(opt);
+                    availableCount++;
+                }
+            });
+
+            if (availableCount === 0) {
+                select.innerHTML = '<option value="">Todos já votaram!</option>';
+                select.disabled = true;
+                btnStart.disabled = true;
+            }
+        }
+
+        // Chama a inicialização
+        initApp();
+
+        select.addEventListener('change', () => btnStart.disabled = select.value === "");
+
+        function startVoting() {
+            currentUser = select.value;
+            votingQueue = teamMembers.filter(m => m !== currentUser);
+            document.getElementById('screen-login').classList.add('hidden');
+            document.getElementById('screen-voting').classList.remove('hidden');
+            renderVotingCard();
+        }
+
+        function renderVotingCard() {
+            if (currentIndex >= votingQueue.length) {
+                showFeedbackScreen();
+                return;
+            }
+            const target = votingQueue[currentIndex];
+            document.getElementById('targetNameTitle').textContent = `Avaliando: ${target}`;
+            document.getElementById('progressText').textContent = `Colaborador ${currentIndex + 1} de ${votingQueue.length}`;
+            
+            const container = document.getElementById('criteriaContainer');
+            container.innerHTML = ''; 
+
+            criteriaList.forEach((crit, idx) => {
+                let optionsHTML = '';
+                for(let i=1; i<=5; i++) {
+                    let legend = i===1 ? '<div class="rating-legend">Ruim</div>' : (i===5 ? '<div class="rating-legend">Excel</div>' : '');
+                    optionsHTML += `
+                        <div class="rating-option">
+                            <input type="radio" name="crit_${idx}" value="${i}" required>
+                            <div class="rating-box">${i}${legend}</div>
+                        </div>`;
+                }
+                container.innerHTML += `<div class="criteria-item"><label style="font-weight:bold;display:block;margin-bottom:5px;">${crit}</label><div class="rating-options">${optionsHTML}</div></div>`;
+            });
+            document.getElementById('screen-voting').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function submitVote() {
+            const form = document.getElementById('voteForm');
+            if (!form.checkValidity()) return alert("Avalie todos os critérios.");
+
+            const currentVotes = {};
+            criteriaList.forEach((crit, idx) => {
+                currentVotes[crit] = parseInt(document.querySelector(`input[name="crit_${idx}"]:checked`).value);
+            });
+
+            votesCollected.push({ target: votingQueue[currentIndex], scores: currentVotes });
+            currentIndex++;
+            form.reset();
+            renderVotingCard();
+        }
+
+        function showFeedbackScreen() {
+            document.getElementById('screen-voting').classList.add('hidden');
+            document.getElementById('screen-feedback').classList.remove('hidden');
+        }
+
+        function submitFeedback() {
+            feedbackText = document.getElementById('feedbackInput').value;
+            finishVotingProcess();
+        }
+
+        async function finishVotingProcess() {
+            document.getElementById('screen-feedback').classList.add('hidden');
+            document.getElementById('screen-finish').classList.remove('hidden');
+
+            const finalPayload = {
+                user: currentUser,
+                votes: votesCollected,
+                dnbFeedback: feedbackText,
+                deviceTime: new Date().toISOString()
+            };
+
+            try {
+                if (window.saveVotesToCloud) {
+                    await window.saveVotesToCloud(finalPayload);
+                    document.getElementById('save-loading').classList.add('hidden');
+                    document.getElementById('save-success').classList.remove('hidden');
+                } else {
+                    throw new Error("Módulo Firebase não carregou.");
+                }
+            } catch (error) {
+                console.error(error);
+                document.getElementById('save-loading').classList.add('hidden');
+                document.getElementById('save-error').classList.remove('hidden');
+                document.getElementById('errorMsg').innerText = error.message || "Erro desconhecido";
+            }
+        }
+
+        window.downloadJSON = () => {
+            const payload = {
+                user: currentUser,
+                votes: votesCollected,
+                dnbFeedback: feedbackText,
+                deviceTime: new Date().toISOString()
+            };
+            const dataStr = JSON.stringify(payload, null, 2);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([dataStr], { type: 'application/json' }));
+            a.download = `backup_votos_${currentUser}.json`;
+            a.click();
+        }
+    </script>
+</body>
+</html>
