@@ -43,16 +43,10 @@
         select, button, textarea {
             display: block; width: 100%; padding: 0.875rem;
             border-radius: 6px; font-size: 1rem; margin-bottom: 1rem;
-            box-sizing: border-box; /* Garante que o padding não estoure a largura */
+            box-sizing: border-box;
         }
         select, textarea { border: 1px solid var(--border); background-color: #fff; }
-        
-        /* Estilo específico para o campo de texto */
-        textarea {
-            font-family: inherit;
-            resize: vertical;
-            min-height: 100px;
-        }
+        textarea { resize: vertical; min-height: 120px; font-family: inherit; }
         
         button {
             border: none; background-color: var(--primary); color: white;
@@ -83,17 +77,21 @@
 </head>
 <body>
 
-    <!-- SCREEN 1: LOGIN -->
+    <!-- TELA 1: LOGIN -->
     <div id="screen-login" class="container">
         <h1>Avaliação de Equipe</h1>
         <p class="subtitle">Selecione seu nome para iniciar.</p>
-        <select id="userSelect">
-            <option value="">Selecione...</option>
+        
+        <!-- Select vazio inicialmente -->
+        <select id="userSelect" disabled>
+            <option value="">Carregando lista...</option>
         </select>
+        
         <button onclick="startVoting()" id="btnStart" disabled>Começar Votação</button>
+        <p id="loadingText" style="text-align: center; font-size: 0.8rem; color: #888; margin-top: 10px;">Verificando quem já votou...</p>
     </div>
 
-    <!-- SCREEN 2: VOTING -->
+    <!-- TELA 2: VOTAÇÃO -->
     <div id="screen-voting" class="container hidden">
         <h2 id="targetNameTitle">Avaliando: Fulano</h2>
         <p class="subtitle" id="progressText">1 de 10</p>
@@ -101,20 +99,21 @@
         <button onclick="submitVote()" style="margin-top: 1rem;">Próximo</button>
     </div>
 
-    <!-- SCREEN 3: FEEDBACK GERAL (NOVA TELA) -->
+    <!-- TELA 3: FEEDBACK DNB -->
     <div id="screen-feedback" class="container hidden">
-        <h2>Feedback Geral</h2>
-        <p class="subtitle">Para finalizar, uma pergunta sobre a empresa.</p>
+        <h2>Melhorias na DNB</h2>
+        <p class="subtitle">Sua opinião é fundamental para nosso crescimento.</p>
         
-        <div class="criteria-item" style="border-bottom: none;">
-            <label style="font-weight:bold; display:block; margin-bottom:5px;">O que você gostaria de melhorar na DNB?</label>
-            <textarea id="generalFeedbackText" placeholder="Escreva sua resposta aqui..."></textarea>
-        </div>
-
-        <button onclick="finishVotingProcess()" style="margin-top: 1rem;">Finalizar e Salvar</button>
+        <label style="font-weight: bold; display: block; margin-bottom: 10px; color: #374151;">
+            O que você acha que deve melhorar em nossa DNB?
+        </label>
+        
+        <textarea id="feedbackInput" placeholder="Digite sua sugestão, crítica construtiva ou observação aqui..."></textarea>
+        
+        <button onclick="submitFeedback()">Finalizar e Enviar</button>
     </div>
 
-    <!-- SCREEN 4: SAVING/FINISH -->
+    <!-- TELA 4: SALVANDO/FINAL -->
     <div id="screen-finish" class="container hidden">
         <div id="save-loading">
             <div class="loader"></div>
@@ -124,8 +123,8 @@
         <div id="save-success" class="hidden" style="text-align: center;">
             <div style="font-size: 4rem; color: var(--success);">✅</div>
             <h2>Sucesso!</h2>
-            <p class="subtitle">Seus votos foram registrados no banco de dados.</p>
-            <p style="font-size: 0.8rem; color: #888;">Pode fechar esta página.</p>
+            <p class="subtitle">Voto registrado! Seu nome não aparecerá mais na lista.</p>
+            <button onclick="location.reload()" style="background-color: #666; margin-top: 10px;">Voltar ao Início</button>
         </div>
 
         <div id="save-error" class="hidden" style="text-align: center;">
@@ -139,9 +138,10 @@
     <!-- FIREBASE MODULES -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        // Adicionei getDocs aqui
+        import { getFirestore, collection, addDoc, serverTimestamp, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-        // CONFIGURAÇÃO REAL DO USUÁRIO
+        // SUAS CHAVES
         const firebaseConfig = {
             apiKey: "AIzaSyDmMU-pZdL2oRJQVBgvG9sY7Z5x3pt9us4",
             authDomain: "votacaoequipe-a72e6.firebaseapp.com",
@@ -151,38 +151,50 @@
             appId: "1:16090491800:web:38cf7b80da0fe17149d9ed"
         };
 
-        // Inicializa Firebase
         let db;
         try {
             const app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             console.log("Firebase conectado!");
         } catch (e) {
-            console.error("Erro Firebase (verifique as chaves):", e);
+            console.error("Erro Firebase:", e);
         }
 
-        // Função global para salvar
+        // Função para salvar
         window.saveVotesToCloud = async (finalData) => {
             if (!db) throw new Error("Firebase não configurado.");
-            
-            // Salva um documento único contendo todos os votos deste usuário
-            // A coleção 'votos_2025' será criada automaticamente
             await addDoc(collection(db, "votos_2025"), {
                 ...finalData,
                 savedAt: serverTimestamp()
             });
         };
+
+        // NOVA FUNÇÃO: Buscar lista de quem já votou
+        window.getAlreadyVotedList = async () => {
+            if (!db) return [];
+            try {
+                const querySnapshot = await getDocs(collection(db, "votos_2025"));
+                const votedUsers = new Set();
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.user) votedUsers.add(data.user);
+                });
+                return Array.from(votedUsers);
+            } catch (e) {
+                console.error("Erro ao verificar votos existentes:", e);
+                return [];
+            }
+        };
     </script>
 
     <script>
-        // LISTA DE COLABORADORES
         const teamMembers = [
             "Adriano", "Ana Carolina", "Arlison", "Elvis", "Mara", 
             "Suendey", "Tahan", "Allan Feitosa", "Rodrigo Almeida", "Aniceto Joziel"
         ];
 
         const criteriaList = [
-            "Proatividade", "Organização", "Qualidade na Entrega",
+            "Proatividade", "Assiduidade e Pontualidade", "Qualidade na Entrega",
             "Produtividade", "Cumprimento de Normas", "Conhecimento Técnico"
         ];
 
@@ -190,16 +202,57 @@
         let votingQueue = [];
         let currentIndex = 0;
         let votesCollected = [];
+        let feedbackText = "";
 
-        // Setup inicial
         const select = document.getElementById('userSelect');
         const btnStart = document.getElementById('btnStart');
-        
-        teamMembers.sort().forEach(name => {
-            const opt = document.createElement('option');
-            opt.value = name; opt.textContent = name;
-            select.appendChild(opt);
-        });
+        const loadingText = document.getElementById('loadingText');
+
+        // INICIALIZAÇÃO INTELIGENTE
+        async function initApp() {
+            // Tenta obter a lista de quem já votou
+            let votedUsers = [];
+            
+            // Espera um pouco para garantir que o módulo Firebase carregou
+            let attempts = 0;
+            while (!window.getAlreadyVotedList && attempts < 10) {
+                await new Promise(r => setTimeout(r, 200));
+                attempts++;
+            }
+
+            if (window.getAlreadyVotedList) {
+                votedUsers = await window.getAlreadyVotedList();
+                loadingText.style.display = 'none';
+            } else {
+                loadingText.innerText = "Modo Offline (Não foi possível verificar votos anteriores)";
+            }
+
+            // Limpa o select
+            select.innerHTML = '<option value="">Selecione seu nome...</option>';
+            select.disabled = false;
+
+            let availableCount = 0;
+
+            teamMembers.sort().forEach(name => {
+                // SÓ ADICIONA SE NÃO ESTIVER NA LISTA DE VOTADOS
+                if (!votedUsers.includes(name)) {
+                    const opt = document.createElement('option');
+                    opt.value = name; 
+                    opt.textContent = name;
+                    select.appendChild(opt);
+                    availableCount++;
+                }
+            });
+
+            if (availableCount === 0) {
+                select.innerHTML = '<option value="">Todos já votaram!</option>';
+                select.disabled = true;
+                btnStart.disabled = true;
+            }
+        }
+
+        // Chama a inicialização
+        initApp();
 
         select.addEventListener('change', () => btnStart.disabled = select.value === "");
 
@@ -223,11 +276,10 @@
             const container = document.getElementById('criteriaContainer');
             container.innerHTML = ''; 
 
-            // Renderiza os critérios de notas
             criteriaList.forEach((crit, idx) => {
                 let optionsHTML = '';
                 for(let i=1; i<=5; i++) {
-                    let legend = i===1 ? '<div class="rating-legend">Ruim</div>' : (i===5 ? '<div class="rating-legend">Excelente</div>' : '');
+                    let legend = i===1 ? '<div class="rating-legend">Ruim</div>' : (i===5 ? '<div class="rating-legend">Excel</div>' : '');
                     optionsHTML += `
                         <div class="rating-option">
                             <input type="radio" name="crit_${idx}" value="${i}" required>
@@ -236,25 +288,19 @@
                 }
                 container.innerHTML += `<div class="criteria-item"><label style="font-weight:bold;display:block;margin-bottom:5px;">${crit}</label><div class="rating-options">${optionsHTML}</div></div>`;
             });
-
             document.getElementById('screen-voting').scrollIntoView({ behavior: 'smooth' });
         }
 
         function submitVote() {
             const form = document.getElementById('voteForm');
-            if (!form.checkValidity()) return alert("Por favor, avalie todos os critérios de nota.");
+            if (!form.checkValidity()) return alert("Avalie todos os critérios.");
 
-            // Coleta notas
             const currentVotes = {};
             criteriaList.forEach((crit, idx) => {
                 currentVotes[crit] = parseInt(document.querySelector(`input[name="crit_${idx}"]:checked`).value);
             });
 
-            votesCollected.push({ 
-                target: votingQueue[currentIndex], 
-                scores: currentVotes
-            });
-
+            votesCollected.push({ target: votingQueue[currentIndex], scores: currentVotes });
             currentIndex++;
             form.reset();
             renderVotingCard();
@@ -265,22 +311,23 @@
             document.getElementById('screen-feedback').classList.remove('hidden');
         }
 
-        async function finishVotingProcess() {
-            // Captura o feedback geral
-            const generalFeedback = document.getElementById('generalFeedbackText').value;
+        function submitFeedback() {
+            feedbackText = document.getElementById('feedbackInput').value;
+            finishVotingProcess();
+        }
 
+        async function finishVotingProcess() {
             document.getElementById('screen-feedback').classList.add('hidden');
             document.getElementById('screen-finish').classList.remove('hidden');
 
             const finalPayload = {
                 user: currentUser,
                 votes: votesCollected,
-                generalFeedback: generalFeedback, // Salva o feedback geral
+                dnbFeedback: feedbackText,
                 deviceTime: new Date().toISOString()
             };
 
             try {
-                // Tenta salvar no Firebase
                 if (window.saveVotesToCloud) {
                     await window.saveVotesToCloud(finalPayload);
                     document.getElementById('save-loading').classList.add('hidden');
@@ -297,7 +344,13 @@
         }
 
         window.downloadJSON = () => {
-            const dataStr = JSON.stringify(votesCollected, null, 2);
+            const payload = {
+                user: currentUser,
+                votes: votesCollected,
+                dnbFeedback: feedbackText,
+                deviceTime: new Date().toISOString()
+            };
+            const dataStr = JSON.stringify(payload, null, 2);
             const a = document.createElement('a');
             a.href = URL.createObjectURL(new Blob([dataStr], { type: 'application/json' }));
             a.download = `backup_votos_${currentUser}.json`;
